@@ -47,10 +47,10 @@ function sources_retroarch() {
 }
 
 function build_retroarch() {
-    local params=(--disable-sdl --enable-sdl2 --disable-oss --disable-al --disable-jack --disable-qt)
+    local params=(--disable-sdl --enable-sdl2 --disable-oss --disable-al --disable-jack --disable-qt --disable-x11)
     if ! isPlatform "x11"; then
         params+=(--disable-pulse)
-        ! isPlatform "mesa" && params+=(--disable-x11)
+        #if ! isPlatform "mesa"; then params+=(--disable-x11); fi
     fi
     if compareVersions "$__os_debian_ver" lt 9; then
         params+=(--disable-ffmpeg)
