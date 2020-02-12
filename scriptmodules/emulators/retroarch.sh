@@ -39,7 +39,7 @@ function depends_retroarch() {
 }
 
 function sources_retroarch() {
-    gitPullOrClone "$md_build" https://github.com/libretro/RetroArch.git v1.7.9.2
+    gitPullOrClone "$md_build" https://github.com/libretro/RetroArch.git v1.8.4
     applyPatch "$md_data/01_hotkey_hack.diff"
     applyPatch "$md_data/02_disable_search.diff"
     applyPatch "$md_data/03_shader_path_config_enable.diff"
@@ -55,6 +55,7 @@ function build_retroarch() {
         params+=(--disable-ffmpeg)
     fi
     isPlatform "gles" && params+=(--enable-opengles)
+    isPlatform "gles3" && params+=(--enable-opengles3)
     isPlatform "rpi" && isPlatform "mesa" && params+=(--disable-videocore)
     # Temporarily block dispmanx support for fkms until upstream support is fixed
     isPlatform "dispmanx" && ! isPlatform "kms" && params+=(--enable-dispmanx --disable-opengl1)
@@ -170,7 +171,7 @@ function configure_retroarch() {
     isPlatform "mesa" && iniSet "video_fullscreen" "true"
 
     # set default render resolution to 640x480 for rpi1
-    if isPlatform "rpi1"; then
+    if isPlatform "videocore" && isPlatform "rpi1"; then
         iniSet "video_fullscreen_x" "640"
         iniSet "video_fullscreen_y" "480"
     fi

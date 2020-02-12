@@ -176,14 +176,27 @@ function configure_mupen64plus() {
     isPlatform "kms" && resolutions=("%XRES%x%YRES%")
 
     if isPlatform "rpi"; then
-        isPlatform "videocore" && addEmulator 1 "${md_id}-auto" "n64" "$md_inst/bin/mupen64plus.sh AUTO %ROM%"
-        for res in "${resolutions[@]}"; do
-            local name=""
-            [[ "$res" == "640x480" ]] && name="-highres"
-            addEmulator 1 "${md_id}-GLideN64$name" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-GLideN64 %ROM% $res"
+        # mesa needs to run at full screen as it doesn't benefit from our SDL scaling hint
+        if isPlatform "mesa"; then
+            res="${resolutions[0]}"
+            addEmulator 1 "${md_id}-GLideN64" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-GLideN64 %ROM% $res 0 --set Video-GLideN64[UseNativeResolutionFactor]\=1"
+            addEmulator 0 "${md_id}-GLideN64-highres" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-GLideN64 %ROM% $res 0 --set Video-GLideN64[UseNativeResolutionFactor]\=2"
             addEmulator 0 "${md_id}-gles2rice$name" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-rice %ROM% $res"
-        done
-        addEmulator 0 "${md_id}-gles2n64" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-n64 %ROM%"
+            addEmulator 0 "${md_id}-gles2n64" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-n64 %ROM%"
+        else
+            for res in "${resolutions[@]}"; do
+                local name=""
+                local nativeResFactor=1
+                if [[ "$res" == "640x480" ]]; then
+                    name="-highres"
+                    nativeResFactor=2
+                fi
+                addEmulator 0 "${md_id}-GLideN64$name" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-GLideN64 %ROM% $res 0 --set Video-GLideN64[UseNativeResolutionFactor]\=$nativeResFactor"
+                addEmulator 0 "${md_id}-gles2rice$name" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-rice %ROM% $res"
+            done
+            addEmulator 1 "${md_id}-auto" "n64" "$md_inst/bin/mupen64plus.sh AUTO %ROM%"
+            addEmulator 0 "${md_id}-gles2n64" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-n64 %ROM%"
+        fi
     elif isPlatform "vero4k"; then
         addEmulator 1 "${md_id}-gles2n64" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-n64 %ROM%"
         addEmulator 0 "${md_id}-GLideN64" "n64" "$md_inst/bin/mupen64plus.sh mupen64plus-video-GLideN64 %ROM%"
@@ -250,14 +263,6 @@ function configure_mupen64plus() {
         iniSet "configVersion" "17"
         # Bilinear filtering mode (0=N64 3point, 1=standard)
         iniSet "bilinearMode" "1"
-        # Size of texture cache in megabytes. Good value is VRAM*3/4
-        local gpu_mem
-        if isPlatform "armv6"; then
-            gpu_mem=64
-        else
-            gpu_mem=128
-        fi
-        iniSet "CacheSize" "$gpu_mem"
         iniSet "EnableFBEmulation" "True"
         # Use native res
         iniSet "UseNativeResolutionFactor" "1"

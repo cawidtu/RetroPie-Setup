@@ -27,8 +27,8 @@ function _autostart_script_autostart() {
     local script="$configdir/all/autostart.sh"
 
     cat >/etc/profile.d/10-retropie.sh <<_EOF_
-# launch our autostart apps (if we are on the correct tty)
-if [ "\`tty\`" = "/dev/tty1" ] && [ "\$USER" = "$user" ]; then
+# launch our autostart apps (if we are on the correct tty and not in X)
+if [ "\`tty\`" = "/dev/tty1" ] && [ -z "\$DISPLAY" ] && [ "\$USER" = "$user" ]; then
     bash "$script"
 fi
 _EOF_
@@ -116,7 +116,7 @@ function gui_autostart() {
             options=(
                 1 "Start Emulation Station at boot"
                 2 "Start Kodi at boot (exit for Emulation Station)"
-                E "Manually edit $configdir/autostart.sh"
+                E "Manually edit $configdir/all/autostart.sh"
             )
             if [[ "$__os_id" == "Raspbian" ]]; then
                 options+=(
