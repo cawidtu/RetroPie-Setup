@@ -12,7 +12,7 @@
 rp_module_id="splashscreen"
 rp_module_desc="Configure Splashscreen"
 rp_module_section="main"
-rp_module_flags="noinstclean !x86 !osmc !xbian !mali"
+rp_module_flags="noinstclean !all rpi !osmc !xbian"
 
 function _update_hook_splashscreen() {
     # make sure splashscreen is always up to date if updating just RetroPie-Setup
@@ -52,7 +52,8 @@ RemainAfterExit=yes
 WantedBy=sysinit.target
 _EOF_
 
-    rp_installModule "omxiv"
+    rp_installModule "omxiv" "_autoupdate_"
+
     gitPullOrClone "$md_inst" https://github.com/RetroPie/retropie-splashscreens.git
 
     cp "$md_data/asplashscreen.sh" "$md_inst"

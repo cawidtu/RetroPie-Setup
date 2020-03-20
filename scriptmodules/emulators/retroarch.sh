@@ -43,6 +43,7 @@ function sources_retroarch() {
     applyPatch "$md_data/01_hotkey_hack.diff"
     applyPatch "$md_data/02_disable_search.diff"
     applyPatch "$md_data/03_shader_path_config_enable.diff"
+    applyPatch "$md_data/04_fix_corrupted_widgets.diff"
 }
 
 function build_retroarch() {
@@ -233,6 +234,9 @@ function configure_retroarch() {
 
     # swap A/B buttons based on ES configuration
     iniSet "menu_swap_ok_cancel_buttons" "$es_swap"
+
+    # enable menu_unified_controls by default (see below for more info)
+    iniSet "menu_unified_controls" "true"
 
     # disable 'press twice to quit'
     iniSet "quit_press_twice" "false"
