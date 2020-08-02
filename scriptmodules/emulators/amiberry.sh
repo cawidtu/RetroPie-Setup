@@ -22,6 +22,8 @@ function _get_platform_amiberry() {
         platform="$__platform"
     elif isPlatform "odroid-xu"; then
         platform="xu4"
+    elif isPlatform "odroid-c1"; then
+        platform="c1"
     elif isPlatform "tinker"; then
         platform="tinker"
     elif isPlatform "vero4k"; then
@@ -31,7 +33,7 @@ function _get_platform_amiberry() {
 }
 
 function depends_amiberry() {
-    local depends=(autoconf libpng-dev libmpeg2-4-dev zlib1g-dev libguichan-dev libmpg123-dev libflac-dev libxml2-dev libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev)
+    local depends=(autoconf libpng-dev libmpeg2-4-dev zlib1g-dev libmpg123-dev libflac-dev libxml2-dev libsdl2-dev libsdl2-image-dev libsdl2-ttf-dev)
 
     isPlatform "dispmanx" && depends+=(libraspberrypi-dev)
     isPlatform "vero4k" && depends+=(vero3-userland-dev-osmc)
@@ -81,14 +83,6 @@ function configure_amiberry() {
 
     # create whdboot config area
     moveConfigDir "$md_inst/whdboot" "$config_dir/whdboot"
-
-    # move hostprefs.conf from previous location
-    if [[ -f "$config_dir/conf/hostprefs.conf" ]]; then
-        mv "$config_dir/conf/hostprefs.conf" "$config_dir/whdboot/hostprefs.conf"
-    fi
-
-    # whdload auto-booter user config - copy default configuration
-    copyDefaultConfig "$md_inst/whdboot-dist/hostprefs.conf" "$config_dir/whdboot/hostprefs.conf"
 
     # copy game-data, save-data folders, boot-data.zip and WHDLoad
     cp -R "$md_inst/whdboot-dist/"{game-data,save-data,boot-data.zip,WHDLoad} "$config_dir/whdboot/"

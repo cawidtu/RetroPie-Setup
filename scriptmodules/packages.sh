@@ -17,6 +17,7 @@ __sections[opt]="optional"
 __sections[exp]="experimental"
 __sections[driver]="driver"
 __sections[config]="configuration"
+__sections[depends]="dependency"
 
 function rp_listFunctions() {
     local idx
@@ -348,10 +349,23 @@ function rp_hasBinaries() {
     return 1
 }
 
+function rp_getBinaryUrl() {
+    local idx="$1"
+    local id="${__mod_id[$idx]}"
+    local url="$__binary_url/${__mod_type[$idx]}/$id.tar.gz"
+    if fnExists "install_bin_${id}"; then
+        if fnExists "__binary_url_${id}"; then
+            url="$(__binary_url_${id})"
+        else
+            url="notest"
+        fi
+    fi
+    echo "$url"
+}
+
 function rp_hasBinary() {
     local idx="$1"
     local id="${__mod_id[$idx]}"
-    fnExists "install_bin_${__mod_id[$idx]}" && return 0
 
     # binary blacklist for armv7 Debian/OSMC due to GCC ABI incompatibility with
     # threaded C++ apps on Raspbian (armv6 userland)
@@ -363,8 +377,12 @@ function rp_hasBinary() {
         esac
     fi
 
+    local url="$(rp_getBinaryUrl $idx)"
+    [[ "$url" == "notest" ]] && return 0
+    [[ -z "$url" ]] && return 1
+
     if rp_hasBinaries; then
-        wget --spider -q "$__binary_url/${__mod_type[$idx]}/${__mod_id[$idx]}.tar.gz"
+        wget --spider -q "$url"
         return $?
     fi
     return 1
@@ -373,14 +391,9 @@ function rp_hasBinary() {
 function rp_getBinaryDate() {
     local idx="$1"
     local id="$(rp_getIdFromIdx $idx)"
-    local url="$__binary_url/${__mod_type[$idx]}/${id}.tar.gz"
-    if fnExists "install_bin_${id}"; then
-        if fnExists "__binary_url_${id}"; then
-            url="$(__binary_url_${id})"
-        else
-            return 1
-        fi
-    fi
+    local url="$(rp_getBinaryUrl $idx)"
+    [[ -z "$url" || "$url" == "notest" ]] && return 1
+
     local bin_date=$(wget \
         --server-response --spider -q \
         "$url" 2>&1 \
@@ -459,8 +472,11 @@ function rp_installModule() {
 # packaging will be overhauled at a later date
 function rp_setPackageInfo() {
     local idx="$1"
-    local pkg="$(rp_getInstallPath $idx)/retropie.pkg"
+    local install_path="$(rp_getInstallPath $idx)"
+    [[ ! -d "$install_path" ]] && return 1
+    local pkg="$install_path/retropie.pkg"
     local origin="$2"
+
     iniConfig "=" '"' "$pkg"
     iniSet "pkg_origin" "$origin"
     local pkg_date

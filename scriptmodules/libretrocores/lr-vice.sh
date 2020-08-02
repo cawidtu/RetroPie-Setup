@@ -21,8 +21,8 @@ function sources_lr-vice() {
 }
 
 function build_lr-vice() {
-    make -f Makefile.libretro clean
-    make -f Makefile.libretro
+    make clean
+    make
     md_ret_require="$md_build/vice_x64_libretro.so"
 }
 
@@ -38,9 +38,11 @@ function configure_lr-vice() {
     mkRomDir "c64"
     ensureSystemretroconfig "c64"
 
-    cp -R "$md_inst/data" "$biosdir"
-    chown -R $user:$user "$biosdir/data"
-
     addEmulator 1 "$md_id" "c64" "$md_inst/vice_x64_libretro.so"
     addSystem "c64"
+
+    [[ "$md_mode" == "remove" ]] && return
+
+    cp -R "$md_inst/data" "$biosdir"
+    chown -R $user:$user "$biosdir/data"
 }

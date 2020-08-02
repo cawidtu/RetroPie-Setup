@@ -241,7 +241,7 @@ function get_all_tvs_modes() {
 
 function get_all_kms_modes() {
     declare -Ag MODE
-    local default_mode="$(echo "$KMS_BUFFER" | grep -m1 "^Mode:.*driver.*crtc")"
+    local default_mode="$(echo "$KMS_BUFFER" | grep -Em1 "^Mode:.*(driver|userdef).*crtc")"
     local crtc="$(echo "$default_mode" | awk '{ print $(NF-1) }')"
     local crtc_encoder="$(echo "$KMS_BUFFER" | grep "Encoder map:" | awk -v crtc="$crtc" '$5 == crtc { print $3 }')"
 
@@ -285,7 +285,7 @@ function get_all_x11_modes()
 
         while read -r line; do
             # scan for line that contains bracketed mode id
-            id="$(echo "$line" | awk '{ print $2 }' | grep "([0-9]\{1,\}x[0-9]\{1,\})")"
+            id="$(echo "$line" | awk '{ print $2 }' | grep -o "(0x[a-f0-9]\{1,\})")"
 
             if [[ -n "$id" ]]; then
                 # strip brackets from mode id
@@ -384,7 +384,7 @@ function get_x11_mode_info() {
         # determine current output
         mode_id[0]="$($XRANDR --verbose | grep " connected" | awk '{ print $1 }')"
         # determine current mode id & strip brackets
-        mode_id[1]="$($XRANDR --verbose | grep " connected" | grep -o "([0-9]\{1,\}x[0-9]\{1,\})")"
+        mode_id[1]="$($XRANDR --verbose | grep " connected" | grep -o "(0x[a-f0-9]\{1,\})")"
         mode_id[1]="$(echo ${mode_id[1]:1:-1})"
     fi
 
@@ -970,8 +970,12 @@ function mode_switch() {
     if [[ "$HAS_MODESET" == "kms" ]]; then
         # update the target resolution even though the underlying fb hasn't changed
         MODE_CUR=($(get_${HAS_MODESET}_mode_info "${mode_id[*]}"))
-        # inject the environment variables to do modesetting for SDL2 applications
-        command_prefix="SDL_VIDEO_KMSDRM_CRTCID=${MODE_CUR[0]} SDL_VIDEO_KMSDRM_MODEID=${MODE_CUR[1]}"
+
+        # check the mode tuple against the list of current available CRCTID/MODEID values
+        if [[ -n ${MODE["${MODE_CUR[0]}-${MODE_CUR[1]}"]} ]]; then
+            # inject the environment variables to do modesetting for SDL2 applications
+            command_prefix="SDL_VIDEO_KMSDRM_CRTCID=${MODE_CUR[0]} SDL_VIDEO_KMSDRM_MODEID=${MODE_CUR[1]}"
+        fi
         COMMAND="$(echo "$command_prefix $COMMAND" | sed -e "s/;/; $command_prefix /g")"
 
         return 0

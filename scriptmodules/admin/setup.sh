@@ -35,7 +35,7 @@ function rps_logInit() {
 function rps_logStart() {
     echo -e "Log started at: $(date -d @$time_start)\n"
     echo "RetroPie-Setup version: $__version ($(git -C "$scriptdir" log -1 --pretty=format:%h))"
-    echo "System: $__os_desc - $(uname -a)"
+    echo "System: $__platform ($__platform_arch) - $__os_desc - $(uname -a)"
 }
 
 function rps_logEnd() {
@@ -74,8 +74,12 @@ function depends_setup() {
         printMsgs "dialog" "WARNING: You have the experimental desktop GL driver enabled. This is NOT supported by RetroPie, and Emulation Station as well as emulators may fail to launch.\n\nPlease disable the experimental desktop GL driver from the raspi-config 'Advanced Options' menu."
     fi
 
+    if isPlatform "rpi" && isPlatform "64bit"; then
+        printMsgs "dialog" "WARNING: 64bit support on the Raspberry Pi is not yet officially supported, although the main emulator package selection should work ok."
+    fi
+
     if [[ "$__os_debian_ver" -eq 8 ]]; then
-        printMsgs "dialog" "Raspbian/Debian Jessie and versions of Ubuntu below 16.04 are no longer supported.\n\nPlease install RetroPie 4.4 or newer from a fresh image which is based on Raspbian Stretch (or if running Ubuntu, upgrade your OS)."
+        printMsgs "dialog" "Raspbian/Debian Jessie and versions of Ubuntu below 18.04 are no longer supported.\n\nPlease install RetroPie from a fresh image (or if running Ubuntu, upgrade your OS)."
     fi
 
     # make sure user has the correct group permissions
@@ -235,7 +239,7 @@ function package_setup() {
 
         case "$choice" in
             U|B|S)
-                dialog --defaultno --yesno "Are you sure you want to ${option_msgs[$choice]}" 22 76 2>&1 >/dev/tty || continue
+                dialog --defaultno --yesno "Are you sure you want to ${option_msgs[$choice]}?" 22 76 2>&1 >/dev/tty || continue
                 local mode
                 case "$choice" in
                     U) mode="_auto_" ;;
@@ -262,7 +266,15 @@ function package_setup() {
                 ;;
             X)
                 local text="Are you sure you want to remove $md_id?"
-                [[ "${__mod_section[$idx]}" == "core" ]] && text+="\n\nWARNING - core packages are needed for RetroPie to function!"
+                case "${__mod_section[$idx]}" in
+                    core)
+                        text+="\n\nWARNING - core packages are needed for RetroPie to function!"
+                        ;;
+                    depends)
+                        text+="\n\nWARNING - this package is required by other RetroPie packages - removing may cause other packages to fail."
+                        text+="\n\nNOTE: This will be reinstalled if missing when updating packages that require it."
+                        ;;
+                esac
                 dialog --defaultno --yesno "$text" 22 76 2>&1 >/dev/tty || continue
                 rps_logInit
                 {
@@ -300,7 +312,8 @@ function section_gui_setup() {
         local num_pkgs=0
         for idx in $(rp_getSectionIds $section); do
             if rp_isInstalled "$idx"; then
-                installed="(Installed)"
+                eval $(rp_getPackageInfo "$idx")
+                installed="\Zb(Installed - via $pkg_origin)\Zn"
                 ((num_pkgs++))
             else
                 installed=""
@@ -310,12 +323,12 @@ function section_gui_setup() {
 
         if [[ "$num_pkgs" -gt 0 ]]; then
             options+=(
-                U "Update all ${__sections[$section]} packages" "This will update any installed ${__sections[$section]} packages. The packages will be updated by the method used previously."
+                U "Update all installed ${__sections[$section]} packages" "This will update any installed ${__sections[$section]} packages. The packages will be updated by the method used previously."
             )
         fi
 
-        # allow installing an entire section except for drivers - as it's probably a bad idea
-        if [[ "$section" != "driver" ]]; then
+        # allow installing an entire section except for drivers and dependencies - as it's probably a bad idea
+        if [[ "$section" != "driver" && "$section" != "depends" ]]; then
             options+=(
                 I "Install all ${__sections[$section]} packages" "This will install all ${__sections[$section]} packages. If a package is not installed, and a pre-compiled binary is available it will be used. If a package is already installed, it will be updated by the method used previously"
                 X "Remove all ${__sections[$section]} packages" "X This will remove all $section packages."
@@ -324,7 +337,7 @@ function section_gui_setup() {
 
         options+=("${pkgs[@]}")
 
-        local cmd=(dialog --backtitle "$__backtitle" --cancel-label "Back" --item-help --help-button --default-item "$default" --menu "Choose an option" 22 76 16)
+        local cmd=(dialog --colors --backtitle "$__backtitle" --cancel-label "Back" --item-help --help-button --default-item "$default" --menu "Choose an option" 22 76 16)
 
         local choice=$("${cmd[@]}" "${options[@]}" 2>&1 >/dev/tty)
         [[ -z "$choice" ]] && break
@@ -353,7 +366,9 @@ function section_gui_setup() {
                     for idx in $(rp_getSectionIds $section); do
                         # if we are updating, skip packages that are not installed
                         if [[ "$mode" == "update" ]]; then
-                            rp_isInstalled "$idx" && rp_installModule "$idx" "_update_" || break
+                            if rp_isInstalled "$idx"; then
+                                rp_installModule "$idx" "_update_" || break
+                            fi
                         else
                             rp_installModule "$idx" "_auto_" || break
                         fi
@@ -433,7 +448,7 @@ function update_packages_setup() {
     clear
     local idx
     for idx in ${__mod_idx[@]}; do
-        if rp_isInstalled "$idx" && [[ -n "${__mod_section[$idx]}" ]]; then
+        if rp_isInstalled "$idx" && [[ "${__mod_section[$idx]}" != "depends" ]]; then
             rp_installModule "$idx" "_update_" || return 1
         fi
     done
@@ -481,7 +496,7 @@ function packages_gui_setup() {
     local default
     local options=()
 
-    for section in core main opt driver exp; do
+    for section in core main opt driver exp depends; do
         options+=($section "Manage ${__sections[$section]} packages" "$section Choose top install/update/configure packages from the ${__sections[$section]}")
     done
 
@@ -539,7 +554,7 @@ function gui_setup() {
     while true; do
         local commit=$(git -C "$scriptdir" log -1 --pretty=format:"%cr (%h)")
 
-        cmd=(dialog --backtitle "$__backtitle" --title "RetroPie-Setup Script" --cancel-label "Exit" --item-help --help-button --default-item "$default" --menu "Version: $__version ($__platform - running on $__os_desc)\nLast Commit: $commit" 22 76 16)
+        cmd=(dialog --backtitle "$__backtitle" --title "RetroPie-Setup Script" --cancel-label "Exit" --item-help --help-button --default-item "$default" --menu "Version: $__version - Last Commit: $commit\nSystem: $__platform ($__platform_arch) - running on $__os_desc" 22 76 16)
         options=(
             I "Basic install" "I This will install all packages from Core and Main which gives a basic RetroPie install. Further packages can then be installed later from the Optional and Experimental sections. If binaries are available they will be used, alternatively packages will be built from source - which will take longer."
 

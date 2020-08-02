@@ -12,7 +12,7 @@
 rp_module_id="sdl2"
 rp_module_desc="SDL (Simple DirectMedia Layer) v2.x"
 rp_module_licence="ZLIB https://hg.libsdl.org/SDL/raw-file/f426dbef4aa0/COPYING.txt"
-rp_module_section=""
+rp_module_section="depends"
 rp_module_flags=""
 
 function get_ver_sdl2() {
@@ -88,7 +88,7 @@ function build_sdl2() {
     sed -i 's/libgl1-mesa-dev,/libgl1-mesa-dev, '"${conf_depends[*]}"'/' ./debian/control
     sed -i 's/confflags =/confflags = '"${conf_flags[*]}"' \\\n/' ./debian/rules
 
-    if isPlatform "rpi"; then
+    if isPlatform "rpi" && [[ -d "/opt/vc/include" ]]; then
         # move proprietary videocore headers
         sed -i -e 's/\"EGL/\"brcmEGL/g' -e 's/\"GLES/\"brcmGLES/g' ./src/video/raspberry/SDL_rpivideo.h
         mv /opt/vc/include/EGL /opt/vc/include/brcmEGL
@@ -99,7 +99,7 @@ function build_sdl2() {
     # using the videocore pkgconfig will cause unwanted linkage, so disable it!
     PKG_CONFIG_PATH= dpkg-buildpackage -b
 
-    if isPlatform "rpi"; then
+    if isPlatform "rpi" && [[ -d "/opt/vc/include" ]]; then
         # restore proprietary headers
         mv /opt/vc/include/brcmEGL /opt/vc/include/EGL
         mv /opt/vc/include/brcmGLES /opt/vc/include/GLES
@@ -126,11 +126,11 @@ function install_sdl2() {
     echo "libsdl2-dev hold" | dpkg --set-selections
 }
 
+function __binary_url_sdl2() {
+    rp_hasBinaries && echo "$__binary_url/libsdl2-dev_$(get_pkg_ver_sdl2)_armhf.deb"
+}
+
 function install_bin_sdl2() {
-    if ! isPlatform "rpi"; then
-        md_ret_errors+=("$md_id is only available as a binary package for platform rpi")
-        return 1
-    fi
     wget -c "$__binary_url/libsdl2-dev_$(get_pkg_ver_sdl2)_armhf.deb"
     wget -c "$__binary_url/libsdl2-2.0-0_$(get_pkg_ver_sdl2)_armhf.deb"
     install_sdl2

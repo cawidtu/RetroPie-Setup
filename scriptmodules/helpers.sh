@@ -103,7 +103,7 @@ function hasFlag() {
 ## @brief Test for current platform / platform flags.
 function isPlatform() {
     local flag="$1"
-    if hasFlag "$__platform $__platform_flags" "$flag"; then
+    if hasFlag "${__platform_flags[*]}" "$flag"; then
         return 0
     fi
     return 1
@@ -145,17 +145,28 @@ function hasPackage() {
     local req_ver="$2"
     local comp="$3"
     [[ -z "$comp" ]] && comp="ge"
-    local status=$(dpkg-query -W --showformat='${Status} ${Version}' $1 2>/dev/null)
-    if [[ $? -eq 0 ]]; then
-        local ver="${status##* }"
-        local status="${status% *}"
-        if [[ -z "$req_ver" ]]; then
-            # if we are not checking on a specific version and the package is installed we are happy
-            [[ "$status" == *"ok installed" ]] && return 0
-        else
-            # otherwise check the version
-            compareVersions "$ver" "$comp" "$req_ver" && return 0
-        fi
+
+    local ver
+    local status
+    local out=$(dpkg-query -W --showformat='${Status} ${Version}' $1 2>/dev/null)
+    if [[ "$?" -eq 0 ]]; then
+        ver="${out##* }"
+        status="${out% *}"
+    fi
+
+    local installed=0
+    [[ "$status" == *"ok installed" ]] && installed=1
+    # if we are not checking version
+    if [[ -z "$req_ver" ]]; then
+        # if the package is installed return true
+        [[ "$installed" -eq 1 ]] && return 0
+    else
+        # if checking version and the package is not installed we need to clear "ver" as it may contain
+        # the version number of a removed package and give a false positive with compareVersions.
+        # we still need to do the version check even if not installed due to the varied boolean operators
+        [[ "$installed" -eq 0 ]] && ver=""
+
+        compareVersions "$ver" "$comp" "$req_ver" && return 0
     fi
     return 1
 }
@@ -301,12 +312,7 @@ function getDepends() {
 
     # install any custom packages
     for pkg in ${own_pkgs[@]}; do
-       # we need to check if we have binaries else install_bin for sdl1/sdl2 could fail
-       if [[ "$__has_binaries" -eq 1 ]]; then
-           rp_callModule "$pkg" _auto_
-       else
-           rp_callModule "$pkg"
-       fi
+       rp_callModule "$pkg" _auto_
     done
 
     aptInstall --no-install-recommends "${apt_pkgs[@]}"
@@ -1127,13 +1133,6 @@ function getPlatformConfig() {
 ## @param exts optional extensions for the frontend (if not present in platforms.cfg)
 ## @details Adds a system to one of the frontend launchers
 function addSystem() {
-    # backward compatibility for old addSystem functionality
-    if [[ $# > 3 ]]; then
-        addEmulator "$@"
-        addSystem "$3"
-        return
-    fi
-
     local system="$1"
     local fullname="$2"
     local exts=($3)
@@ -1143,9 +1142,9 @@ function addSystem() {
     local cmd
     local path
 
-    # check if we are removing the system
-    if [[ "$md_mode" == "remove" ]]; then
-        delSystem "$id" "$system"
+    # if removing and we don't have an emulators.cfg we can remove the system from the frontends
+    if [[ "$md_mode" == "remove" ]] && [[ ! -f "$md_conf_root/$system/emulators.cfg" ]]; then
+        delSystem "$system" "$fullname"
         return
     fi
 
@@ -1191,7 +1190,11 @@ function addSystem() {
 ## @details deletes a system from all frontends.
 function delSystem() {
     local system="$1"
-    local fullname="$(getPlatformConfig "${system}_fullname")"
+    local fullname="$2"
+
+    local temp
+    temp="$(getPlatformConfig "${system}_fullname")"
+    [[ -n "$temp" ]] && fullname="$temp"
 
     local function
     for function in $(compgen -A function _del_system_); do
@@ -1228,13 +1231,16 @@ function addPort() {
         mv "$configdir/$port" "$md_conf_root/"
     fi
 
-    # remove the ports launch script if in remove mode
+    # remove the emulator / port
     if [[ "$md_mode" == "remove" ]]; then
-        rm -f "$file"
         delEmulator "$id" "$port"
+
+        # remove launch script if in remove mode and the ports emulators.cfg is empty
+        [[ ! -f "$md_conf_root/$port/emulators.cfg" ]] && rm -f "$file"
+
         # if there are no more port launch scripts we can remove ports from emulation station
         if [[ "$(find "$romdir/ports" -maxdepth 1 -name "*.sh" | wc -l)" -eq 0 ]]; then
-            delSystem "$id" "ports"
+            delSystem "ports"
         fi
         return
     fi
@@ -1335,13 +1341,6 @@ function delEmulator() {
         grep -q "=" "$config" || rm -f "$config"
     fi
 
-    # if we don't have an emulators.cfg we can remove the system from the frontends
-    if [[ ! -f "$md_conf_root/$system/emulators.cfg" ]]; then
-        local function
-        for function in $(compgen -A function _del_system_); do
-            "$function" "$fullname" "$system"
-        done
-    fi
 }
 
 ## @fn patchVendorGraphics()
@@ -1400,7 +1399,10 @@ function dkmsManager() {
             ;;
         reload)
             dkmsManager unload "$module_name" "$module_ver"
-            modprobe "$module_name"
+            # No reason to load modules in chroot
+            if [[ "$__chroot" -eq 0 ]]; then
+                modprobe "$module_name"
+            fi
             ;;
         unload)
             if [[ -n "$(lsmod | grep ${module_name/-/_})" ]]; then
